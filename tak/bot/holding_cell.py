@@ -133,8 +133,14 @@ class BasicNegamax(Bot):
         
         #? Stack bonuses
         
-        FCD_BONUS        = 50
-        FLAT_COUNT_BONUS = 10
+        MIDDLE_GAME = 30
+        LATE_GAME   = 60
+        
+        FCD_BONUS_EARLY  = 75
+        FCD_BONUS_MIDDLE = 100
+        FCD_BONUS_LATE   = 200
+        
+        FLAT_COUNT_BONUS = 30
         
         #? Wall and cap positional bonuses
         
@@ -144,13 +150,13 @@ class BasicNegamax(Bot):
         CAP_ON_EDGE_PENALTY = -150
         
         HARD_CAP_BONUS  = 50
-        HARD_WALL_BONUS = 30
+        HARD_WALL_BONUS = 25
         
-        CAP_ON_STACK  = 60
+        CAP_ON_STACK  = 50
         WALL_ON_STACK = 30
         FLAT_ON_STACK = 10
         
-        CAP_NEARBY_STACK  = 50
+        CAP_NEARBY_STACK  = 40
         WALL_NEARBY_STACK = 30
         
         NEIGBOURING_CAPS = 20
@@ -218,9 +224,13 @@ class BasicNegamax(Bot):
                 evaluation += recruits * FLAT_ON_STACK
                 continue
             
+            
+            
             #? PUT YOUR CAP ON THE STACK
 
             cap = pos.top.stone_type == "cap"
+            
+            
             
             if cap:
                 evaluation += recruits * CAP_ON_STACK
@@ -298,9 +308,18 @@ class BasicNegamax(Bot):
         
         flat_count = self.board.count_flats()
         
+        evaluation += flat_count[PLAYER] * FLAT_COUNT_BONUS
+        
         fcd = flat_count[PLAYER] - flat_count[OPPONENT] - (self.board.half_komi / 2)
         
-        evaluation += round(fcd * FCD_BONUS) + flat_count[PLAYER] * FLAT_COUNT_BONUS
+        if PLY >= LATE_GAME:
+            evaluation += round(fcd * FCD_BONUS_LATE)
+        
+        elif PLY >= MIDDLE_GAME:
+            evaluation += round(fcd * FCD_BONUS_MIDDLE)
+        
+        else:
+            evaluation += round(fcd * FCD_BONUS_EARLY)
         
         
         return evaluation

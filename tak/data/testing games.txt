@@ -1,0 +1,27 @@
+[Player1 "NegamaxBot"]
+[Player2 "Rei"]
+[Size "6"]
+[Komi "1"]
+[Flats "30"]
+[Caps "1"]
+[Opening "swap"]
+[Result "0-R"]
+
+1. a1 f1
+2. Cd4 c3
+3. c1 c2
+4. b1 d1
+5. e1 d2
+6. a2 d1<
+7. d1 Cc4
+8. b2 a1>
+9. a1 c5
+10. c6 b5
+11. b6 a6
+12. d1< 2b1>
+13. b2> d2<
+14. b6- c5<
+15. d2 2c2>
+16. b2 b4
+17. b2> 3c1+
+18. b1 a5 0-R

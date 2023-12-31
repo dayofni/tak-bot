@@ -148,5 +148,9 @@ class PlaytakClient:
     def move_to_server(self, move):
         ...
 
-cl = PlaytakClient()
-cl.connect("ManicBot", "%UZY%)D26jtaK7p")
+with open("login_details.txt") as f:
+    
+    creds = [i for i in f.read().split() if i]
+    
+    cl = PlaytakClient()
+    cl.connect(*creds)
