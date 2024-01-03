@@ -1,5 +1,5 @@
 # tak-bot
- the home of ManicBot
+ > the home of ManicBot
 
 ManicBot is an implementation of the Negamax algorithm with alpha/beta pruning, designed to play Tak. (a game designed by James Earnest, dreamed up by Patrick Rothfuss)
 
