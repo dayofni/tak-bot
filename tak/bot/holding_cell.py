@@ -350,21 +350,3 @@ class BasicNegamax(Bot):
             evaluation -= 10 * len(self.board.state[move["position"]].stack)
         
         return evaluation
-        
-        evaluation = 0
-        
-        if move["move_type"] == "place":
-            
-            piece_values = {
-                "flat": 200, 
-                "wall": 50, 
-                "cap":  10 * self.board.ply
-            }
-            
-            evaluation += piece_values[move["stone_type"]]
-        
-        else:
-            
-            evaluation = 100
-        
-        return evaluation

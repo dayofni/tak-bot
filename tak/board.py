@@ -3,7 +3,15 @@ from itertools import permutations
 
 RANDOM_SEED = [3141592653589, 644204232404]
 
-def getrandbits(bits):
+def getrandbits(bits: int) -> int:
+    
+    """
+    Get a psuedo-random number given two random int seeds.
+    
+    Implements XOR-shift algorithm. Exists because I don't want to mess up the `random` library.
+    
+    And may be vaguely faster.
+    """
     
     global RANDOM_SEED
     
@@ -23,28 +31,49 @@ def getrandbits(bits):
 
 class Stone:
     
-    def __init__(self, colour: str, stone_type: str):
+    """
+    A singular stone for the superb game of Tak.
+    
+    (what were you expecting???)
+    """
+    
+    def __init__(self, colour: str, stone_type: str) -> None:
         
         self.colour = colour
         self.stone_type = stone_type
     
-    def crush(self):
+    def crush(self) -> None:
+        
+        """
+        Capstone crush. Doesn't care if the stone is flat already.
+        
+        # ALL SHALL FALL TO THE ALMIGHTY CAPSTONE
+        """
+        
         self.stone_type = "flat"
     
-    def __repr__(self):
+    def __repr__(self) -> None:
         return f"<Stone {self.colour}, {self.stone_type}>"
     
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return (self.colour == other.colour) and (self.stone_type == other.stone_type)
 
-class Position:
+class Stack:
     
-    def __init__(self):
+    """
+    A stack of `Stones`. Has multiple functions designed to handle them.
+    """
+    
+    def __init__(self) -> None:
         
         self.top = None
         self.stack = []
     
-    def add_stone(self, stone):
+    def add_stone(self, stone: Stone) -> None:
+        
+        """
+        Adds a stone to the stack. (appends stone to `Stack.stack`)
+        """
         
         if self.stack != []:
         
@@ -57,11 +86,19 @@ class Position:
         self.stack.append(stone)
         self.top = stone
     
-    def get_stones(self, num):
+    def get_stones(self, num: int) -> list[Stone]:
+        
+        """
+        Get `num` stones from the top of the stack. (does not impact stack)
+        """
         
         return self.stack[-num:]
     
-    def pop_stones(self, num):
+    def pop_stones(self, num: int) -> list[Stone]:
+        
+        """
+        Remove `num` stones from the top of the stack.
+        """
         
         temp = self.stack[-num:]
         
@@ -76,21 +113,26 @@ class Position:
         return temp.copy()
     
     def __repr__(self):
-        return f"<Position {self.top} {self.stack}>"
+        return f"<Stack {self.top} {self.stack}>"
     
     def __eq__(self, other):
         return (self.top == other.top) and (self.stack == other.stack)
 
 class TakBoard:
     
-    def __init__(self, board_size, auto_generate=True, half_komi=0):
+    """
+    Board representation for the game of Tak.
+    
+    `board_size` is the length of one side - a 6x6 board (6s) would be `board_size=6`.
+    """
+    
+    def __init__(self, board_size: int, half_komi: int) -> None:
         
         self.size = board_size
         self.half_komi = half_komi
-        self.state = [Position() for i in range(board_size ** 2)]
+        self.state = [Stack() for i in range(board_size ** 2)]
         self.ply = 0
-        self.AUTO_GENERATE_MOVES = auto_generate
-        
+                
         self.SPREAD_PRECALC = self._precalc_move_distances()
         
         
@@ -104,44 +146,75 @@ class TakBoard:
         }
         
         self.player_reserves = {n:self.RESERVE_COUNTS[self.size].copy() for n in ["white", "black"]}
+        self.std_reserves    = self.RESERVE_COUNTS[self.size]
         self.terminal = False
         self.winning_player = None
         self.win_type = None
         
         self.legal_moves = self.get_valid_moves("white")
         
-        self.ZOBRIST_CONSTANTS = self._generate_zobrist_constants()
+        self.ZOBRIST_CONSTANTS = self._generate_zobrist_keys()
+        self.ZOBRIST_HASH      = self.generate_zobrist_hash("white")
     
     #? Helper functions
     
-    def pos_to_index(self, pos):
+    def pos_to_index(self, pos: str) -> int:
+        
+        """
+        Transforms a board position string (e.g., a1, f4) to an index to `self.state`.
+        """
         
         file, rank = tuple([i for i in pos.lower()])
         position = self.get_index(int(rank) - 1, "abcdefgh".index(file))
         
         return position
-    
-    def get_index(self, rank, file):
-        assert (rank > -1) and (file > -1), "Rank or file is negative."
-        return (rank * self.size) + file
-    
-    def get_pos(self, index):
+
+    def get_pos(self, index: int) -> str:
+        
+        """
+        Transforms an index to `self.state` to a board position string (e.g., a1, f4). 
+        """
         
         rank = index // self.size
         file = index % self.size
         
         return "abcdefgh"[file] + str(rank + 1)
     
-    def get_rank_file(self, index):
+    def get_index(self, rank: int, file: int) -> int:
+        
+        """
+        Returns an index to `self.state` given a rank and file. (Rank and file both start at 0.)
+        """
+        
+        assert (rank > -1) and (file > -1), "Rank or file is negative."
+        return (rank * self.size) + file
+    
+    def get_rank_file(self, index: int) -> tuple[int, int]:
+        
+        """
+        Returns the rank and file of an index to `self.state`. (Rank and file both start at 0.)
+        """
+        
         rank = index // self.size
         file = index % self.size
         
         return rank, file
     
-    def invert_player(self, player: str):
+    def invert_player(self, player: str) -> str:
+        
+        """
+        Returns the opposite player, given the two players "black" and "white".
+        
+        ##### [Will be deprecated once I move to int representation of players!]
+        """
+        
         return "black" if player == "white" else "white"
     
-    def count_flats(self):
+    def count_flats(self) -> dict[str: int]:
+        
+        """
+        Counts number of flats for each player.
+        """
         
         stacks = [pos for pos in self.state if pos.stack != [] and pos.top.stone_type == "flat"]
         
@@ -152,14 +225,21 @@ class TakBoard:
     
     #? Move generation
     
-    def get_valid_places(self, player):
+    def get_valid_places(self, player: str) -> list[dict]:
         
         """
+        Returns all legal place moves (e.g., a1, Sf4, Cc3) for player `player`.
+        
+        The format for all place moves:
+        
+        ```
         PLACE_FORMAT = {
             "move_type": "place",
-            "position": int,
-            "stone_type": "flat/wall/cap"
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
         }
+        ```
         """
         
         empty_spaces = [n for n, pos in enumerate(self.state) if not pos.top]
@@ -186,14 +266,23 @@ class TakBoard:
         
         return places
     
-    def get_valid_spreads(self, player):
+    def get_valid_spreads(self, player: str) -> list[dict]:
         
-        ADD_DIR = {
-            "+": self.size,
-            "-": -self.size,
-            ">": 1,
-            "<": -1
+        """
+        Returns all legal stack spread moves (e.g., a1>, 2f4+11, 6c3<312) for player `player`.
+        
+        The format for all place moves:
+        
+        ```
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
         }
+        ```
+        """
         
         stack_moves = []
         
@@ -278,7 +367,19 @@ class TakBoard:
         
         return stack_moves
     
-    def get_spread_distances(self, pos, stack):
+    def get_spread_distances(self, pos: int, stack: Stack) -> dict[str: dict]:
+        
+        """
+        Return all spaces a spread can span, for all possible directions (orthogonal).
+        
+        ```
+        DISTANCE_FORMAT = {
+            "squares": list[int], # a list of all positions a spread can span
+            "cap":     Optional[int] # optional space where a capstone crush works
+        }
+        ```
+        
+        """
         
         movements = {i:{"squares": [], "cap": None} for i in "+-><"} # N S E W 
         row = None
@@ -323,17 +424,30 @@ class TakBoard:
         
         return movements
     
-    def get_valid_moves(self, player):
+    def get_valid_moves(self, player: str) -> list[dict]:
         
         
         """
-        MOVE_FORMAT = {
-            "move_type": "spread",
-            "position": int
-            "direction": "+-<>",
-            "movement": [int, int] # (indexes),
-            "stacks": [int, int] # pieces to play
+        Returns all legal moves from the current position for player `player`.
+        
+        Internal move formats are below:
+        
+        ```
+        PLACE_FORMAT = {
+            "move_type": "place",
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
         }
+        
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
+        }
+        ```
         """
         
         terminal = self.determine_win(player)
@@ -357,7 +471,15 @@ class TakBoard:
         
         return places + spreads
         
-    def _precalc_move_distances(self):
+    def _precalc_move_distances(self) -> dict[tuple[int, int]: list[tuple[int]]]:
+        
+        """
+        Precalculate all possible stack spreads given the `distance` of the spread and the number of `stones` involved.
+        
+        Not intended for external use. It's run during `TakBoard.__init__`.
+        
+        Just get the results from `TakBoard.SPREAD_PRECALC`.
+        """
         
         precalc = {}
        
@@ -396,7 +518,14 @@ class TakBoard:
         
         return precalc
     
-    def _fsd(self, seq): # "Find shift digit"
+    def _fsd(self, seq: list): # "Find shift digit"
+        
+        """
+        Found within `TakBoard._precalc_move_distances()`. As such, not intended for external use.
+        
+        Creates the digit to change to create a new permutation. Honestly, I'm not sure how else to describe it.
+        """
+        
         shift = [n for n, val in enumerate(seq) if val > 1]
         
         if len(shift) == 0 or len(seq) == 1:
@@ -411,7 +540,16 @@ class TakBoard:
     
     #? Move making
     
-    def make_move(self, move, player):
+    def make_move(self, move: dict, player: str) -> bool:
+        
+        """
+        Attempt to make the move `move` for player `player`.
+        
+        Will not perform illegal moves from the position for that player.
+        
+        Returns `True` if successful, else returns `False`.
+        
+        """
         
         if move in self.legal_moves:
             
@@ -447,7 +585,18 @@ class TakBoard:
         
         return True
     
-    def undo_move(self, move, player):
+    def undo_move(self, move: dict, player: str) -> bool:
+        
+        """
+        Undoes the move `move` for player `player`.
+        
+        Unlike `TakBoard.make_move`, this *does not* check legality.
+        
+        Returns `True` if successful. (redundant, but eh, who cares)
+        
+        
+        ###### [Note from dayofni: this f****** function had so many bugs istg-]
+        """
         
         if move["move_type"] == "place":
             
@@ -486,7 +635,30 @@ class TakBoard:
     
     #? PTN handling
     
-    def ptn_to_move(self, ptn_string, player):
+    def ptn_to_move(self, ptn_string: str, player: str) -> dict:
+        
+        """
+        Converts a given PTN string to the `TakBoard` internal format.
+        
+        Internal move formats are below:
+        
+        ```
+        PLACE_FORMAT = {
+            "move_type": "place",
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
+        }
+        
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
+        }
+        ```
+        """
         
         # How to check
         
@@ -622,7 +794,32 @@ class TakBoard:
             "crush": crush
         }
     
-    def move_to_ptn(self, move):
+    def move_to_ptn(self, move: dict) -> str:
+        
+        """
+        Converts a move in the `TakBoard` format to a PTN string.
+        
+        Internal move formats are below:
+        
+        ```
+        PLACE_FORMAT = {
+            "move_type": "place",
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
+        }
+        
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
+        }
+        ```
+        
+        ###### [Note from dayofni: Kinda funny how this function's shorter than the inverse...]
+        """
         
         position = self.get_pos(move["position"])
         
@@ -644,7 +841,30 @@ class TakBoard:
 
     #? Server move format handling
     
-    def server_to_move(self, server_move, player):
+    def server_to_move(self, server_move: str, player: str) -> dict:
+        
+        """
+        Converts a given playtak move command to the `TakBoard` internal format.
+        
+        Internal move formats are below:
+        
+        ```
+        PLACE_FORMAT = {
+            "move_type": "place",
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
+        }
+        
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
+        }
+        ```
+        """
         
         move_type, data = server_move[0], server_move[1:]
 
@@ -711,7 +931,32 @@ class TakBoard:
         
         return None
     
-    def move_to_server(self, move):
+    def move_to_server(self, move: dict) -> str:
+        
+        """
+        Converts a move in the `TakBoard` format to the playtak command format.
+        
+        Internal move formats are below:
+        
+        ```
+        PLACE_FORMAT = {
+            "move_type": "place",
+            "colour": player, # (necessary because of swap opening)
+            "position": int, # index to self.state
+            "stone_type": "flat / wall / cap" # pick one
+        }
+        
+        SPREAD_FORMAT = {
+            "move_type": "spread",
+            "position": int, # index to self.state
+            "direction": "+ / - / < / >" # pick one, will be deprecated soonish because we want *speed*
+            "movement": tuple[int], # tuple of all spaces the spread covers
+            "stacks": tuple[int] # how many pieces per space?
+        }
+        ```
+        
+        ###### [Note from dayofni: Again, it's hilarious that this is shorter than the inverse operation...]
+        """
         
         position = self.get_pos(move["position"]).upper()
         move_type = {"place": "P", "spread": "M"}[move["move_type"]]
@@ -732,8 +977,12 @@ class TakBoard:
 
     #? TPS handling
         
-    def position_to_TPS(self):
+    def position_to_TPS(self) -> str:
 
+        """
+        Creates a string representation of the current position using the TPS (Tak Position Notation) format.
+        """
+        
         tps_string = []
         
         for row_num in range(self.size):
@@ -790,7 +1039,14 @@ class TakBoard:
         
         return "/".join(tps_string) + f" {player} {current_round}"
 
-    def load_from_TPS(self, tps_string):
+    def load_from_TPS(self, tps_string: str) -> None:
+        
+        """
+        ### WARNING: BUGGY!
+        
+        Loads a position from a TPS (Tak Positional Notation) string representation.
+        
+        """
         
         tps_string = tps_string.upper().strip()
         
@@ -819,14 +1075,14 @@ class TakBoard:
             for pos in row_data:
                 
                 if pos[0] == "X" and len(pos) > 1:
-                    for _ in range(int(pos[1])): new_row.append(Position())
+                    for _ in range(int(pos[1])): new_row.append(Stack())
                     continue
                 
                 elif pos[0] == "X":
-                    new_row.append(Position())
+                    new_row.append(Stack())
                     continue
                 
-                new_row.append(Position())
+                new_row.append(Stack())
                 
                 if pos[-1].isalpha():                        # pos -1 is a letter, ergo must be SC
                     top = {"S": "wall", "C": "cap"}[pos[-1]] # hehe dictionary go brrrrr
@@ -864,7 +1120,15 @@ class TakBoard:
     
     #? Win determination
     
-    def determine_win(self, current_player):
+    def determine_win(self, current_player: str) -> bool:
+        
+        """
+        Determines whether the current position is a terminal position.
+        
+        If so, sets winning player to `TakBoard.winning_player`. (It may not be the current player!)
+        
+        #### Going to fix this function later
+        """
         
         road_win = self.determine_road_win(current_player)
         
@@ -878,7 +1142,13 @@ class TakBoard:
         
         return None
      
-    def determine_flat_win(self):
+    def determine_flat_win(self) -> tuple[bool, str]:
+        
+        """
+        Determines whether a flat win exists at the current position.
+        
+        If so, returns `(True, player)`, where `player` is the winning player.
+        """
         
         reserves = [flat + cap for player, (flat, cap) in self.player_reserves.items()]
         
@@ -900,16 +1170,13 @@ class TakBoard:
         
         return True, player
     
-    def find_edges(self):
+    def determine_road_win(self, current_player) -> tuple[bool, str]:
         
-        edges = [self.size * (self.size - 1) + i for i in range(self.size)] + \
-                    list(range(self.size)) + \
-                        [n * self.size for n in range(1, self.size - 1)] + \
-                            [n * self.size + self.size - 1 for n in range(1, self.size - 1)]
+        """
+        Determines whether a road win exists at the current position.
         
-        return edges
-    
-    def determine_road_win(self, current_player):
+        If so, returns `(True, player)`, where `player` is the winning player.
+        """
         
         north_edges = [self.size * (self.size - 1) + i for i in range(self.size)]
         south_edges = list(range(self.size))
@@ -949,7 +1216,11 @@ class TakBoard:
         
         return None
     
-    def find_connections(self):
+    def find_connections(self) -> dict[tuple[int, str]: tuple]:
+        
+        """
+        Implements a flood-fill algorithm that finds all road connections.
+        """
         
         nodes = {n: i.top.colour for n, i in enumerate(self.state) if i.stack != [] and i.top.stone_type != "wall"}
         
@@ -1002,9 +1273,32 @@ class TakBoard:
         
         return groups
     
+    def find_edges(self) -> list[int]:
+        
+        """
+        Short little function to find the edges of the board.
+        """
+        
+        edges = [self.size * (self.size - 1) + i for i in range(self.size)] + \
+                    list(range(self.size)) + \
+                        [n * self.size for n in range(1, self.size - 1)] + \
+                            [n * self.size + self.size - 1 for n in range(1, self.size - 1)]
+        
+        return edges
+
     #? ASCII Representation
     
     def generate_win_str(self):
+        
+        """
+        Generates a string representation of the terminal state of the board.
+        
+        If White wins: `R-0` (road) or `1-0` (flats)
+        
+        If Black wins: `0-R` (road) or `0-1` (flats)
+        
+        If it's a draw: `1/2-1/2`
+        """
         
         if not self.terminal: return None
         
@@ -1020,6 +1314,12 @@ class TakBoard:
             return f"0-{win_type}"
     
     def to_str(self, piece_count=True, tps=True):
+        
+        """
+        Generates a string representation of the board.
+        
+        It's recommended to use `str(TakBoard)` unless you need to change from default settings.
+        """
         
         ret = ""
         
@@ -1089,56 +1389,112 @@ class TakBoard:
     
     #? Hashing
     
-    def _generate_zobrist_constants(self):
+    #! INCOMPLETE
+    
+    def _generate_zobrist_keys(self) -> dict[str: int]:
+        
+        """
+        Generates all Zobrist keys required for the Zobrist hashing function.
+        """
         
         ZOBRIST_BITS = 64
         
-        position     = self.size ** 2 # Board size
-        piece_colour = 6 # Number of piece-colour combinations
-        stack_height = 2 * sum(self.RESERVE_COUNTS[self.size]) # Stack height 0 - 63 on 6s
-        player_turn  = 2
+        reserves = self.std_reserves
         
-        zobrist_constants = {
-            "position":     [],
-            "piece_colour": [],
-            "stack_height": [],
-            "player_turn":  [],
+        board_size   = self.size ** 2
+        stone_number = 6
+        max_height   = 2 * reserves[0] + 1 if reserves[1] else 0
+        
+        ZOBRIST_KEYS = {
+            "stack": [],
+            "player": []
         }
         
-        used = []
+        used_keys = []
         
-        for name, num in zip(list(zobrist_constants.keys()), [position, piece_colour, stack_height, player_turn]):
-            while len(zobrist_constants[name]) < num:
+        while len(ZOBRIST_KEYS["stack"]) < board_size * stone_number * max_height:
+            key = getrandbits(ZOBRIST_BITS)
             
-                key = getrandbits(ZOBRIST_BITS)
-            
-                if key not in used:
-                    zobrist_constants[name].append(key)
-                    used.append(key)
-        
-        # reset random seed
-        
-        return zobrist_constants
-    
-    def generate_zobrist_hash(self):
-        
-        zhash = self.ZOBRIST_CONSTANTS["player_turn"][0 if self.current_player == "white" else 1]
-        
-        for p, pos in enumerate(self.state):
-            
-            if pos.stack == []:
+            if key in used_keys:
                 continue
             
-            zhash ^= self.ZOBRIST_CONSTANTS["position"][p]
-            zhash ^= self.ZOBRIST_CONSTANTS["stack_height"][len(pos.stack)]
+            used_keys.append(key)
+            ZOBRIST_KEYS["stack"].append(key)
+
+        while len(ZOBRIST_KEYS["player"]) < 2:
+            key = getrandbits(ZOBRIST_BITS)
             
-            for stone in pos.stack:
-                colour = 0 if stone.colour == "white" else 3
-                piece  = ["flat", "wall", "cap"].index(stone.stone_type)
-                
-                zhash ^= self.ZOBRIST_CONSTANTS["piece_colour"][colour + piece]
+            if key in used_keys:
+                continue
             
-        return zhash
+            used_keys.append(key)
+            ZOBRIST_KEYS["player"].append(key)
+        
+        # Number of different stones * board size * max height + current_player
+        # reset random seed
+        
+        return ZOBRIST_KEYS
+    
+    def get_zobrist_piece_key(self, position: int, height: int, stone_type: str, stone_colour: str) -> int:
+        
+        """
+        Returns the Zobrist key for the given position, height, and stone.
+        """
+        
+        board_size = self.size ** 2
+        
+        # stone type 1-3 and stone colour 1-2
+        stone = {"flat": 0, "wall": 1, "cap": 2}[stone_type] + (0 if stone_colour == "white" else 3)
+        
+        # Treat each input as another number base
+        
+        index = stone + (6 * position) + (6 * board_size * height)
+        
+        return self.ZOBRIST_CONSTANTS["stack"][index]
+
+
+    def get_zobrist_stack_key(self, position: int, stack: Stack):
+        
+        """
+        Generates the Zobrist hash for an individual stack.
+        """
+        
+        key = 0
+        
+        if not stack.stack:
+            return None
+        
+        for height, stone in enumerate(stack.stack):
+            stone_type   = stone.stone_type
+            stone_colour = stone.colour
+            
+            key ^= self.get_zobrist_piece_key(position, height, stone_type, stone_colour)
+
+        return key
+    
+    def generate_zobrist_hash(self, player: str):
+        
+        """
+        Generates the full Zobrist hash for a given position.
+        """
+        
+        current_hash = self.ZOBRIST_CONSTANTS["player"][0 if player == "white" else 1]
+        
+        for position in enumerate(self.state):
+            
+            if not position[1].stack: continue
+            
+            current_hash ^= self.get_zobrist_stack_key(*position)
+        
+        return current_hash
     
     def __hash__(self):
-        return self.generate_zobrist_hash()
+        
+        """
+        
+        # ISN'T WORKING RIGHT NOW; USE `TakBoard.generate_zobrist_hash`!
+        
+        Returns the Zobrist hash of the position.
+        """
+        
+        return None # self.ZOBRIST_HASH

@@ -1,25 +1,11 @@
 
-from tak.engine import TakEngine
+from tak.board import TakBoard
 from pprint import pprint
 
-bot = "NegamaxBot"
+board = TakBoard(6, 4)
 
-engine = TakEngine(6, half_komi=2)
+board.load_from_TPS("x,21,x4/x,1,x4/x,1221,1C,2,2C,x/x2,11121S,x3/2,1,1221,x2,2/x2,1,x,2,x 1 20")
 
-print(engine.board.server_to_move(
-    "M A3 A1 1 1".split(), "white"
-))
-
-"""
-engine.load_from_TPS("x2,2S,2S,2S,x/1,12S,1,1,1,x/1,1,1,2C,x2/x2,1,x3/2,x,1,x3/2,x,1,x,2,2 2 10")
-
-print(engine)
-
-engine.add_bot(bot, colour="black") 
-
-engine.current_player = "black"
-move = engine.get_bot_move(bot)
-
-print(engine.board.move_to_ptn(move))
-print(engine)
-"""
+print(board)
+print(board.generate_zobrist_hash("white"))
+print(board.generate_zobrist_hash("black"))

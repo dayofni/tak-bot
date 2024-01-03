@@ -4,6 +4,7 @@ import websockets
 
 from time import time
 from random import choice
+from json import loads
 
 from tak.engine import TakEngine
 
@@ -11,15 +12,31 @@ from tak.engine import TakEngine
 
 BOT = "NegamaxBot"
 
-class PlaytakClient:
+class PlaytakBotClient:
     
     def __init__(self):
-        ...
+        
+        self.engine = None
     
-    def connect(self, username, password):
-        asyncio.run(self._connect(username, password))
+    def connect(self, username: str, password: str, BOT_NAME=BOT) -> None:
+        
+        """
+        [Wrapper for `asyncio.run` for `PlaytakBotClient._connect`. Allows client to be run without wrapping in async function.]
+        
+        Connects to the playtak.com API using a websocket (URI: `ws://playtak.com:9999/ws`) and logs into an account using the given `username` and `password`.
+        
+        Passes BOT_NAME to `PlaytakBotClient._main()`.
+        """
+        
+        asyncio.run(self._connect(username, password, BOT_NAME=BOT_NAME))
     
-    async def _connect(self, username, password):
+    async def _connect(self, username: str, password: str, BOT_NAME=BOT) -> None:
+        
+        """
+        Connects to the playtak.com API using a websocket (URI: `ws://playtak.com:9999/ws`) and logs into an account using the given `username` and `password`.
+        
+        Passes BOT_NAME to `PlaytakBotClient._main()`.
+        """
         
         PLAYTAK_URI = "ws://playtak.com:9999/ws"
         
@@ -28,43 +45,58 @@ class PlaytakClient:
             # Login protocols
             
             msg = None
-            while msg != "Login or Register":
+            while msg != "Login or Register": # Wait for the server to boot
                 msg = await self._rec(ws)
             
-            # now we can log in
+            # Now we can log in
             
             login = f"Login {username} {password}"
             await asyncio.gather(self._send(login, ws))
             
-            welcome_msg = f"Welcome {username}!"
+            welcome_msg = f"Welcome {username}!" # Once we get this, we know that we've logged in
             login_msg   = await self._rec(ws)
             
-            assert login_msg == welcome_msg, "Invalid username or password!"
+            assert login_msg == welcome_msg, "Invalid username or password!" # If we don't... well, you've messed up the login sequence
             
-            print(welcome_msg)
+            print(welcome_msg) # Show that we've logged into the account
                         
-            await asyncio.gather(self._main(ws))
+            await asyncio.gather(self._main(ws, BOT_NAME=BOT_NAME)) # Start the client.
     
-    async def _send(self, msg, ws):
+    async def _send(self, msg: str, ws) -> None:
+        
+        """
+        Sends a string `msg` to websocket `ws`.
+        """
         
         await ws.send(msg)
 
-    async def _rec(self, ws):
+    async def _rec(self, ws) -> str:
+        
+        """
+        Recieves latest message from websocket `ws`.
+        """
         
         msg = await ws.recv()
         msg = msg.decode()[:-1] # Removes the linefeed
         
         return msg
     
-    async def _main(self, ws):
+    async def _main(self, ws, BOT_NAME=BOT) -> None:
+        
+        """
+        Main loop of `PlaytakBotClient`. Requires websocket with logged in playtak connection.
+        
+        Recieves messages from playtak server and parses them. `tak.engine.TakEngine` handles the bot code (set bot using `BOT` global var!)
+        
+        It's recommended to just use `PlaytakBotClient.connect()` instead of calling `PlaytakBotClient._main()` directly.
+        """
         
         # Set up engine
         
-        engine = TakEngine(size=6, half_komi=4)
+        self.engine = TakEngine(size=6, half_komi=4)
         
         seek_up = False
         in_game = False
-        ask = False
         
         colour   = None
         game_no  = None
@@ -77,20 +109,25 @@ class PlaytakClient:
             "ahoy, %s! glhf!",
         ]
         
+        spoken_to = {}
+        
         while True:
             
             if (not seek_up) and (not in_game):
                 
                 # Post seek
+                
                 print("Creating seek...", end=" ")
                 
-                await self._send("Seek 6 600 10 B 4 30 1 1 0", ws) # Seek 6 60 5 B 4 30 1 unrated tournament opponent
+                #? Format: Seek <size> <time> <incr> <player> <komi> <pieces> <capstones> <unrated> <tournament>
+                
+                await self._send("Seek 6 600 10 A 4 30 1 0 0", ws)
                 
                 print("posted!")
                 
                 seek_up = True
             
-            # Wait for messages
+            # Wait for messages and save to console log
             
             new = await self._rec(ws)
             print("SERVER :", new)
@@ -99,7 +136,7 @@ class PlaytakClient:
             
             if new[:10] == "Game Start":
                 
-                colour   = "wbite" if "white" in msg_tokens else "black"
+                colour   = "white" if "white" in msg_tokens else "black"
                 game_no  = int(msg_tokens[2])
                 player_2 = msg_tokens[4]
                 in_game  = True
@@ -109,48 +146,67 @@ class PlaytakClient:
                 blessing = choice(blessings)
                 blessing = blessing % player_2 if "%s" in blessing else blessing
                 
-                await self._send(f"Tell {player_2} {blessing}", ws)
+                if (player_2 not in spoken_to) or (time() - spoken_to[player_2] >= 300):
+                    
+                    await self._send(f"Tell {player_2} {blessing}", ws)
+                    spoken_to[player_2] = time()
                 
                 # Set up engine.
                 
-                engine.reset()
+                self.engine.reset()
                 
-                engine.add_bot(BOT, colour=colour)
-                engine.add_player(player_2)
+                self.engine.add_bot(BOT_NAME, colour=colour)
+                self.engine.add_player(player_2)
+                
+                # If we're player 1, we need to make the first move
+                
+                if colour == "white":
+                    
+                    await self._send_bot_move(BOT_NAME, game_no, ws)
+                    print(self.engine)
             
             elif new[:5] == "Game#" and ("M" in new) or ("P" in new):
                 
-                move = engine.board.server_to_move(msg_tokens[1:], engine.current_player)
+                # React to moves
                 
-                engine.make_move(move)
+                move = self.engine.board.server_to_move(msg_tokens[1:], self.engine.current_player)
                 
-                print(engine)
+                self.engine.make_move(move)
                 
-                if not engine.terminal:
+                print(self.engine)
                 
-                    bot_move = engine.board.move_to_server(engine.get_bot_move(BOT)[0])
+                if not self.engine.terminal:
                 
-                    await self._send(f"Game#{game_no} {bot_move}", ws)
+                    await self._send_bot_move(BOT_NAME, game_no, ws)
                     
-                    print(engine)
+                    print(self.engine)
             
             elif new[:5] == "Game#" and ("Over" in new):
+                
+                # Game's over, make a new seek
                 
                 seek_up = False
                 in_game = False
             
+            # Don't want to activate every second - wastes bandwidth on both sides.
+            
             await asyncio.sleep(0.5)
-        
-        # WHAT ARE WE DOING HERE
-        # 1. while true: parse incoming messages
-        # 2. if someone accepts our game, move over
-    
-    def move_to_server(self, move):
-        ...
 
-with open("login_details.txt") as f:
-    
-    creds = [i for i in f.read().split() if i]
-    
-    cl = PlaytakClient()
-    cl.connect(*creds)
+    async def _send_bot_move(self, bot_name: str, game_no: int, ws):
+        
+        """
+        Determine the bot's next move and send it to server.
+        """
+        
+        bot_move = self.engine.board.move_to_server(self.engine.get_bot_move(bot_name)[0])
+        
+        await self._send(f"Game#{game_no} {bot_move}", ws)
+
+if __name__ == "__main__":
+
+    with open("data/secrets.json") as f:
+
+        creds = loads(f.read())["login_credentials"]
+
+        cl = PlaytakBotClient()
+        cl.connect(*creds)

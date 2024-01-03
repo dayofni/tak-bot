@@ -133,7 +133,7 @@ class BasicNegamax(Bot):
         
         #? Stack bonuses
         
-        FCD_BONUS        = 50
+        FCD_BONUS        = 75
         FLAT_COUNT_BONUS = 10
         
         #? Wall and cap positional bonuses
@@ -141,13 +141,15 @@ class BasicNegamax(Bot):
         PLACE_CAP_BY        = 16
         BOOST_AT            = 10
         CAP_PLACEMENT_BONUS = 150
+        
         CAP_ON_EDGE_PENALTY = -150
+        WALL_ON_EDGE_BONUS  = 50
         
         HARD_CAP_BONUS  = 50
         HARD_WALL_BONUS = 30
         
         CAP_ON_STACK  = 60
-        WALL_ON_STACK = 30
+        WALL_ON_STACK = 40
         FLAT_ON_STACK = 10
         
         CAP_NEARBY_STACK  = 50
@@ -235,10 +237,15 @@ class BasicNegamax(Bot):
                 if PLY >= PLACE_CAP_BY:
                     evaluation += CAP_PLACEMENT_BONUS // 2
                 
-                edges = self.board.find_edges()
+            edges = self.board.find_edges()
                 
-                if p in edges:
+            if p in edges:
+                
+                if cap:
                     evaluation += CAP_ON_EDGE_PENALTY
+
+                else:
+                    evaluation += WALL_ON_EDGE_BONUS
             
             #? Neighbour checking
             
