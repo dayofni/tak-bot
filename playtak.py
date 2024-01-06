@@ -10,7 +10,7 @@ from tak.engine import TakEngine
 
 # CREDITS TO the1Rogue FOR FIGURING OUT THE PLAYTAK WEBSOCKET PROTOCOLS
 
-BOT = "NegamaxBot"
+BOT = "ManicBotV1"
 
 class PlaytakBotClient:
     
@@ -18,7 +18,7 @@ class PlaytakBotClient:
         
         self.engine = None
     
-    def connect(self, username: str, password: str, BOT_NAME=BOT) -> None:
+    def connect(self, username: str, password: str, BOT_NAME=BOT, uri="ws://playtak.com:9999/ws") -> None:
         
         """
         [Wrapper for `asyncio.run` for `PlaytakBotClient._connect`. Allows client to be run without wrapping in async function.]
@@ -28,19 +28,17 @@ class PlaytakBotClient:
         Passes BOT_NAME to `PlaytakBotClient._main()`.
         """
         
-        asyncio.run(self._connect(username, password, BOT_NAME=BOT_NAME))
+        asyncio.run(self._connect(username, password, BOT_NAME=BOT_NAME, uri=uri))
     
-    async def _connect(self, username: str, password: str, BOT_NAME=BOT) -> None:
+    async def _connect(self, username: str, password: str, BOT_NAME=BOT, uri="ws://playtak.com:9999/ws") -> None:
         
         """
-        Connects to the playtak.com API using a websocket (URI: `ws://playtak.com:9999/ws`) and logs into an account using the given `username` and `password`.
+        Connects to the playtak.com API using a websocket (Websocket URI: `ws://playtak.com:9999/ws`) and logs into an account using the given `username` and `password`.
         
         Passes BOT_NAME to `PlaytakBotClient._main()`.
         """
         
-        PLAYTAK_URI = "ws://playtak.com:9999/ws"
-        
-        async with websockets.connect(PLAYTAK_URI, subprotocols=["binary"], ping_timeout=None) as ws:
+        async with websockets.connect(uri, subprotocols=["binary"], ping_timeout=None) as ws:
             
             # Login protocols
             
@@ -209,4 +207,5 @@ if __name__ == "__main__":
         creds = loads(f.read())["login_credentials"]
 
         cl = PlaytakBotClient()
+        
         cl.connect(*creds)

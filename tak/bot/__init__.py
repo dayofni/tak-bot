@@ -1,8 +1,10 @@
 
-from tak.bot.basic import RandomMoves, LookaheadRandom, LookaheadHeuristic
-from tak.bot.alphabeta import BasicNegamax
+from tak.bot.basic     import *
+from tak.bot.alphabeta import *
+from tak.bot.manicbot  import *
 
 BOTS = {
+    "ManicBotV1": ManicBotV1,
     "NegamaxBot": BasicNegamax,
     "BasicBot": LookaheadHeuristic,
     "LookaheadBot": LookaheadRandom,

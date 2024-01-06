@@ -8,17 +8,19 @@ engine = TakEngine(6, half_komi=2)
 #print(engine)
 
 player = "dayofni"
-bot    = "NegamaxBot"
+bot    = "ManicBotV1"
 bot2   = "NegamaxBotTest"
 
 mode = "human"
+
+engine.add_bot(bot)
 
 if mode == "bot":
     engine.add_bot(bot2, colour="white")
 else:
     engine.add_player(player)
 
-engine.add_bot(bot)
+
 
 if mode == "human":
     colour = engine.players[player]["colour"]
@@ -37,6 +39,7 @@ while not engine.terminal:
         engine.get_human_move()
         print(f"\n{engine.to_str(ply=False, current_player=False, piece_count=False, tps=False)}")
     print()
+    print(engine.board.generate_zobrist_hash(engine.current_player), engine.board.ZOBRIST_HASH, "\n")
 
 """
 while not engine.terminal:

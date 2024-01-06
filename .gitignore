@@ -156,3 +156,6 @@ data/testing games.txt
 tak/bot/holding_cell.py
 tak/bot/holding_cell.py
 testing.py
+download_games.py
+notes.md
+testing.py

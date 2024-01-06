@@ -3,7 +3,7 @@ from tak.bot.shared import Bot
 
 INFINITY = 999999999 # not literally infinity because we're using ints, not floats!
 
-class BasicNegamax(Bot):
+class ManicBotV1(Bot):
     
     def __init__(self):
         
@@ -60,7 +60,7 @@ class BasicNegamax(Bot):
         
         for m, move in enumerate(moves):
             
-            assert self.board.make_move(move, player), f"Invalid move detected at depth={depth} (ply={self.board.ply}, player={player}), move={move}. Board: \n{self.board}"
+            self.board.make_move(move, player)
 
             eval_ = -self.negamax_search(
                 player    = self.board.invert_player(player),
@@ -70,7 +70,7 @@ class BasicNegamax(Bot):
                 beta      = -alpha
             )
             
-            assert self.board.undo_move(move, player), f"Unable to undo move???"
+            self.board.undo_move(move, player)
             
             if eval_ > best:
                 best = eval_

@@ -135,7 +135,6 @@ class TakBoard:
                 
         self.SPREAD_PRECALC = self._precalc_move_distances()
         
-        
         self.RESERVE_COUNTS = {
             3: [10, 0],
             4: [15, 0],
@@ -154,7 +153,7 @@ class TakBoard:
         self.legal_moves = self.get_valid_moves("white")
         
         self.ZOBRIST_CONSTANTS = self._generate_zobrist_keys()
-        self.ZOBRIST_HASH      = self.generate_zobrist_hash("white")
+        self.zobrist_hash      = self.generate_zobrist_hash("white")
     
     #? Helper functions
     
@@ -561,10 +560,35 @@ class TakBoard:
                     self.player_reserves[player][1] -= 1
                 
                 self.state[move["position"]].add_stone(Stone(move["colour"], move["stone_type"]))
+                
+                # Adding to the Zobrist hash
+                
+                self.zobrist_hash ^= self.get_zobrist_piece_key(move["position"], 0, move["stone_type"], move["colour"])
             
-            elif move["move_type"] == "spread":
+            elif move["move_type"] == "spread": #! Zobrist is currently broken
                 
                 # Get stones
+                
+                if move["crush"]:
+                    end = move["movement"][-1]
+                    end_stack = self.state[end]
+                    
+                    self.zobrist_hash ^= self.get_zobrist_piece_key(
+                        end,
+                        len(end_stack.stack) - 1,
+                        "wall",
+                        end_stack.top.colour
+                    )
+                    
+                    self.zobrist_hash ^= self.get_zobrist_piece_key(
+                        end,
+                        len(end_stack.stack) - 1,
+                        "flat",
+                        end_stack.top.colour
+                    )
+                
+                original_height = len(self.state[move["position"]].stack)
+                current_height  = original_height - sum(move["stacks"])
                 
                 stones = self.state[move["position"]].pop_stones(sum(move["stacks"]))
                 
@@ -573,12 +597,34 @@ class TakBoard:
                     for stone in stones[:amount]:
                         
                         self.state[position].add_stone(stone)
+                        
+                        self.zobrist_hash ^= self.get_zobrist_piece_key(
+                            position,
+                            len(self.state[position].stack) - 1,
+                            stone.stone_type,
+                            stone.colour
+                        )
                     
+                    for stone in stones[:amount]:
+                        
+                        self.zobrist_hash ^= self.get_zobrist_piece_key(
+                            move["position"], 
+                            current_height, 
+                            stone.stone_type, 
+                            stone.colour
+                        )
+                        
+                        current_height += 1
+
                     del stones[:amount]
-            
+        
         else:
             return False
         
+        # XOR current player
+        
+        self.zobrist_hash ^= self.ZOBRIST_CONSTANTS["black_to_move"]
+          
         self.ply += 1
         
         self.legal_moves = self.get_valid_moves(self.invert_player(player))
@@ -604,25 +650,70 @@ class TakBoard:
             self.state[move["position"]].top   = None
             
             self.player_reserves[player][1 if move["stone_type"] == "cap" else 0] += 1
+            
+            self.zobrist_hash ^= self.get_zobrist_piece_key(move["position"], 0, move["stone_type"], move["colour"])
         
         elif move["move_type"] == "spread":
             
             stones = []
+            
+            
+            # To undo the hash:
+            #  . First, deal with the spreads
+            #    -> For each stack, remove the stones from the hash
+            #  . Second, add the stones back to the main stack
                 
             for position, amount in zip(move["movement"], move["stacks"]):
                 
                 cut = self.state[position].pop_stones(amount)
+                
+                for h, stone in enumerate(cut):
+                    
+                    # remove from stack
+                    
+                    self.zobrist_hash ^= self.get_zobrist_piece_key(
+                        position,
+                        len(self.state[position].stack) + h, # calc
+                        stone.stone_type,
+                        stone.colour
+                    )
                 
                 stones += cut
                 
             for stone in stones:
                 
                 self.state[move["position"]].add_stone(stone)
+                
+                self.zobrist_hash ^= self.get_zobrist_piece_key(
+                    move["position"],
+                    len(self.state[move["position"]].stack) - 1, # calc
+                    stone.stone_type,
+                    stone.colour
+                )
             
             if move["crush"]:
+                
                 last_space = move["movement"][-1]
+                last_pos = self.state[last_space]
+                
                 self.state[last_space].stack[-1].stone_type = "wall"
                 self.state[last_space].top = self.state[last_space].stack[-1]
+                
+                self.zobrist_hash ^= self.get_zobrist_piece_key(
+                    last_space,
+                    len(last_pos.stack) - 1, # calc
+                    "flat",
+                    last_pos.top.colour
+                )
+                
+                self.zobrist_hash ^= self.get_zobrist_piece_key(
+                    last_space,
+                    len(last_pos.stack) - 1, # calc
+                    "wall",
+                    last_pos.top.colour
+                )
+        
+        self.zobrist_hash ^= self.ZOBRIST_CONSTANTS["black_to_move"]
         
         self.terminal = False
         self.winning_player = None
@@ -1387,9 +1478,7 @@ class TakBoard:
     def __str__(self):
         return self.to_str()
     
-    #? Hashing
-    
-    #! INCOMPLETE
+    #? Hashing - it should now be done!!!!!!!!!
     
     def _generate_zobrist_keys(self) -> dict[str: int]:
         
@@ -1403,16 +1492,16 @@ class TakBoard:
         
         board_size   = self.size ** 2
         stone_number = 6
-        max_height   = 2 * reserves[0] + 1 if reserves[1] else 0
+        max_height   = 2 * reserves[0] + (1 if reserves[1] else 0)
         
         ZOBRIST_KEYS = {
             "stack": [],
-            "player": []
+            "black_to_move": None
         }
         
         used_keys = []
         
-        while len(ZOBRIST_KEYS["stack"]) < board_size * stone_number * max_height:
+        while len(ZOBRIST_KEYS["stack"]) < (board_size * stone_number * max_height):
             key = getrandbits(ZOBRIST_BITS)
             
             if key in used_keys:
@@ -1421,14 +1510,15 @@ class TakBoard:
             used_keys.append(key)
             ZOBRIST_KEYS["stack"].append(key)
 
-        while len(ZOBRIST_KEYS["player"]) < 2:
+        ZOBRIST_KEYS["stack"] = tuple(ZOBRIST_KEYS["stack"])
+
+        while not ZOBRIST_KEYS["black_to_move"]:
             key = getrandbits(ZOBRIST_BITS)
             
             if key in used_keys:
                 continue
             
-            used_keys.append(key)
-            ZOBRIST_KEYS["player"].append(key)
+            ZOBRIST_KEYS["black_to_move"] = key
         
         # Number of different stones * board size * max height + current_player
         # reset random seed
@@ -1451,7 +1541,6 @@ class TakBoard:
         index = stone + (6 * position) + (6 * board_size * height)
         
         return self.ZOBRIST_CONSTANTS["stack"][index]
-
 
     def get_zobrist_stack_key(self, position: int, stack: Stack):
         
@@ -1478,7 +1567,7 @@ class TakBoard:
         Generates the full Zobrist hash for a given position.
         """
         
-        current_hash = self.ZOBRIST_CONSTANTS["player"][0 if player == "white" else 1]
+        current_hash = self.ZOBRIST_CONSTANTS["black_to_move"] if player == "black" else 0
         
         for position in enumerate(self.state):
             
@@ -1491,10 +1580,7 @@ class TakBoard:
     def __hash__(self):
         
         """
-        
-        # ISN'T WORKING RIGHT NOW; USE `TakBoard.generate_zobrist_hash`!
-        
         Returns the Zobrist hash of the position.
         """
         
-        return None # self.ZOBRIST_HASH
+        return self.zobrist_hash
